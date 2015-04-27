@@ -232,32 +232,13 @@ namespace hpp
 
       namespace
       {
-	/// \brief Convert joint orientation to standard
-	/// jrl-dynamics accepted orientation.
-	///
-	/// abstract-robot-dynamics do not contain any information
-	/// about around which axis a rotation joint rotates.
-	/// On the opposite, it makes the assumption it is around the X
-	/// axis. We have to make sure this is the case here.
-	///
 	/// We use Gram-Schmidt process to compute the rotation matrix.
 	///
 	/// [1] http://en.wikipedia.org/wiki/Gram%E2%80%93Schmidt_process
-	Parser::MatrixHomogeneousType
-	normalizeFrameOrientation (Parser::UrdfJointConstPtrType urdfJoint)
+	Parser::MatrixHomogeneousType computeRotationMatrix (vector3_t x)
 	{
-	  if (!urdfJoint) {
-	    throw std::runtime_error
-	      ("Null pointer in normalizeFrameOrientation");
-	  }
-
 	  Parser::MatrixHomogeneousType result;
 	  result.setIdentity ();
-
-	  vector3_t x (urdfJoint->axis.x,
-		       urdfJoint->axis.y,
-		       urdfJoint->axis.z);
-	  x.normalize ();
 
 	  vector3_t y (0., 0., 0.);
 	  vector3_t z (0., 0., 0.);
@@ -281,6 +262,26 @@ namespace hpp
 	    }
 	  result.setRotation (R);
 	  return result;
+	}
+
+	/// \brief Convert joint orientation to standard
+	/// jrl-dynamics accepted orientation.
+	///
+	/// abstract-robot-dynamics do not contain any information
+	/// about around which axis a rotation joint rotates.
+	/// On the opposite, it makes the assumption it is around the X
+	/// axis. We have to make sure this is the case here.
+	Parser::MatrixHomogeneousType
+	normalizeFrameOrientation (Parser::UrdfJointConstPtrType urdfJoint)
+	{
+	  if (!urdfJoint) {
+	    throw std::runtime_error
+	      ("Null pointer in normalizeFrameOrientation");
+	  }
+
+	  vector3_t x (urdfJoint->axis.x, urdfJoint->axis.y, urdfJoint->axis.z);
+	  x.normalize ();
+	  return computeRotationMatrix (x);
 	}
       } // end of anonymous namespace.
 
@@ -879,16 +880,59 @@ namespace hpp
         if (baseJoint_) baseJoint_->addChildJoint (joint);
         else if (robot) robot->rootJoint (joint);
 	parent = joint;
-	// joint SO3
-	joint = objectFactory_.createJointSO3 (mat);
-	jointName = name + "_SO3";
-	if (jointsMap_.find (jointName) != jointsMap_.end ()) {
+	// joint SO3 : made of 3 unbounded rotation joints
+	// Warning : urdf initial rotation (mat) is lost
+	model::vector3_t rotVect; rotVect.setZero ();
+	MatrixHomogeneousType matRotJoint;
+
+	// set limits of BoundedJointRotations manually ?
+	jointName = name + "_SO3_rot_z";
+	rotVect [2] = 1.;
+	matRotJoint = computeRotationMatrix (rotVect);
+	hppDout (info, "matRotJoint_z = " << matRotJoint);
+	joint = objectFactory_.createBoundedJointRotation (matRotJoint);
+	joint->name (jointName);
+
+	jointsMap_[jointName] = joint;
+	parent->addChildJoint (joint);
+	parent = joint;
+	joint->lowerBound (0, -3.14159265);
+	joint->upperBound (0, +3.14159265);
+	jointName = name + "_SO3_rot_y";
+	rotVect [2] = 0.; rotVect [1] = 1.;
+	matRotJoint = computeRotationMatrix (rotVect);
+	hppDout (info, "matRotJoint_y = " << matRotJoint);
+	joint = objectFactory_.createBoundedJointRotation (matRotJoint);
+	joint->name (jointName);
+	joint->lowerBound (0, -3.14159265);
+	joint->upperBound (0, +3.14159265);
+	jointsMap_[jointName] = joint;
+	parent->addChildJoint (joint);
+	parent = joint;
+
+	jointName = name + "_SO3"; // (x rotation) to fit expected name
+	rotVect [1] = 0.; rotVect [0] = 1.;
+	matRotJoint = computeRotationMatrix (rotVect);
+	hppDout (info, "matRotJoint_x = " << matRotJoint);
+	joint = objectFactory_.createBoundedJointRotation (matRotJoint);
+	joint->name (jointName);
+	joint->lowerBound (0, -3.14159265);
+	joint->upperBound (0, +3.14159265);
+	jointsMap_[jointName] = joint;
+	parent->addChildJoint (joint);
+	parent = joint;
+	/*
+	  joint = objectFactory_.createJointSO3 (mat);
+	  jointName = name + "_SO3";
+	  if (jointsMap_.find (jointName) != jointsMap_.end ()) {
 	  throw std::runtime_error (std::string ("Duplicated joint ") +
-				    jointName);
-	}
+	  jointName);
+	  }
+	
 	joint->name (jointName);
 	jointsMap_[jointName] = joint;
 	parent->addChildJoint (joint);
+	*/
       }
 
       void
@@ -922,7 +966,7 @@ namespace hpp
 	fcl::Transform3f pos;
 	pos.setRotation (permutation * mat.getRotation ());
 	pos.setTranslation (T);
-	joint = objectFactory_.createUnBoundedJointRotation (pos);
+	joint = objectFactory_.createBoundedJointRotation (pos); // MODIFIED
 	jointName = name + "_rz";
 	if (jointsMap_.find (jointName) != jointsMap_.end ()) {
 	  throw std::runtime_error (std::string ("Duplicated joint ") +
@@ -932,8 +976,10 @@ namespace hpp
 	pos.inverse ();
 	joint->linkInJointFrame (pos);
 	jointsMap_[jointName] = joint;
-	joint->lowerBound (0, -numeric_limits<double>::infinity());
-	joint->upperBound (0, +numeric_limits<double>::infinity());
+	//joint->lowerBound (0, -numeric_limits<double>::infinity());
+	//joint->upperBound (0, +numeric_limits<double>::infinity());
+	joint->lowerBound (0, -3.14159265);
+	joint->upperBound (0, +3.14159265);
 	parent->addChildJoint (joint);
 	parent = joint;
       }
