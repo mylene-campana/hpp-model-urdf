@@ -885,7 +885,6 @@ namespace hpp
 	model::vector3_t rotVect; rotVect.setZero ();
 	MatrixHomogeneousType matRotJoint;
 
-	// set limits of BoundedJointRotations manually ?
 	jointName = name + "_SO3_rot_z";
 	rotVect [2] = 1.;
 	matRotJoint = computeRotationMatrix (rotVect);
@@ -896,16 +895,16 @@ namespace hpp
 	jointsMap_[jointName] = joint;
 	parent->addChildJoint (joint);
 	parent = joint;
-	joint->lowerBound (0, -3.14159265);
-	joint->upperBound (0, +3.14159265);
+	joint->lowerBound (0, -M_PI);
+	joint->upperBound (0, M_PI);
 	jointName = name + "_SO3_rot_y";
 	rotVect [2] = 0.; rotVect [1] = 1.;
 	matRotJoint = computeRotationMatrix (rotVect);
 	hppDout (info, "matRotJoint_y = " << matRotJoint);
 	joint = objectFactory_.createBoundedJointRotation (matRotJoint);
 	joint->name (jointName);
-	joint->lowerBound (0, -3.14159265);
-	joint->upperBound (0, +3.14159265);
+	joint->lowerBound (0, -M_PI);
+	joint->upperBound (0, M_PI);
 	jointsMap_[jointName] = joint;
 	parent->addChildJoint (joint);
 	parent = joint;
